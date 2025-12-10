@@ -85,9 +85,9 @@ def render_home(df):
 
     components.html(header_html, height=95)
 
-    st.write("")  # เว้นระยะจากหัว
+    #st.write("")  # เว้นระยะจากหัว
 
-     # ---------------- เตรียมข้อมูล Date (คอลัมชื่อ Date, รูปแบบวัน/เดือน/ปี) ----------------
+        # ---------------- เตรียมข้อมูล Date (คอลัมชื่อ Date, รูปแบบวัน/เดือน/ปี) ----------------
     df_display = df.copy()
 
     # แปลงคอลัม Date -> datetime (ข้อมูล dd/MM/yyyy)
@@ -104,10 +104,10 @@ def render_home(df):
     else:
         min_date = max_date = datetime.now().date()
 
-    # ---------------- UI Filter: Date From / To + Type ----------------
-    st.caption("Date (DD/MM/YYYY)")
+    # ---------------- UI Filter: Date From / To + Type + List + Channel ----------------
+    #st.caption("Date (DD/MM/YYYY)")
 
-    col_from, col_to, col_type = st.columns([2, 2, 1.5])
+    col_from, col_to, col_type, col_list, col_channel = st.columns([2, 2, 1.5, 1.5, 1.5])
 
     # From
     with col_from:
@@ -150,6 +150,40 @@ def render_home(df):
             label_visibility="collapsed",
         )
 
+    # List dropdown
+    with col_list:
+        st.text("List")
+        if "List" in df_display.columns:
+            list_options = ["All"] + sorted(
+                df_display["List"].dropna().astype(str).unique().tolist()
+            )
+        else:
+            list_options = ["All"]
+
+        selected_list = st.selectbox(
+            "list_select",
+            list_options,
+            index=0,
+            label_visibility="collapsed",
+        )
+
+    # Channel dropdown
+    with col_channel:
+        st.text("Channel")
+        if "Channel" in df_display.columns:
+            channel_options = ["All"] + sorted(
+                df_display["Channel"].dropna().astype(str).unique().tolist()
+            )
+        else:
+            channel_options = ["All"]
+
+        selected_channel = st.selectbox(
+            "channel_select",
+            channel_options,
+            index=0,
+            label_visibility="collapsed",
+        )
+
     # ถ้า user เลือกสลับ from/to ก็สลับกลับให้
     if date_from > date_to:
         date_from, date_to = date_to, date_from
@@ -162,9 +196,17 @@ def render_home(df):
     )
     df_filtered = df_display[mask].copy()
 
-    # filter ตาม Type ถ้าไม่ใช่ All
+    # filter ตาม Type
     if "Type" in df_filtered.columns and selected_type != "All":
         df_filtered = df_filtered[df_filtered["Type"].astype(str) == selected_type]
+
+    # filter ตาม List
+    if "List" in df_filtered.columns and selected_list != "All":
+        df_filtered = df_filtered[df_filtered["List"].astype(str) == selected_list]
+
+    # filter ตาม Channel
+    if "Channel" in df_filtered.columns and selected_channel != "All":
+        df_filtered = df_filtered[df_filtered["Channel"].astype(str) == selected_channel]
 
     # ลบคอลัมน์ช่วย
     df_filtered = df_filtered.drop(columns=["date_dt"])
