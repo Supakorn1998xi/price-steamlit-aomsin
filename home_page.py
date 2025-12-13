@@ -10,8 +10,7 @@ import calendar
 def parse_bath(x):
     if x is None or (isinstance(x, float) and pd.isna(x)) or (isinstance(x, str) and x.strip() == ""):
         return 0.0
-    s = str(x).strip()
-    s = s.replace("฿", "").replace(",", "")
+    s = str(x).strip().replace("฿", "").replace(",", "")
     try:
         return float(s)
     except:
@@ -31,36 +30,38 @@ def kpi_card(title: str, value: str):
 """
 
 
-# CSS (บังคับให้การ์ดชนะ theme)
-st.markdown(
-    """
-<style>
-.kpi-card{
-  border: 1px solid rgba(255,255,255,0.25) !important;
-  border-radius: 999px !important;
-  padding: 16px 18px !important;
-  background: rgba(255,255,255,0.95) !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;
-  text-align: center !important;
-}
-.kpi-title{
-  font-size: 14px !important;
-  color: rgba(0,0,0,0.55) !important;
-  margin-bottom: 4px !important;
-}
-.kpi-value{
-  font-size: 26px !important;
-  font-weight: 600 !important;
-  color: rgba(0,0,0,0.90) !important;
-  line-height: 1.1 !important;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-
 def render_home(df: pd.DataFrame):
+    # ---------------- KPI CSS (ให้เสถียรทุกครั้งที่ rerun) ----------------
+    st.markdown("""
+    <style>
+    .kpi-card{
+      border: 1px solid rgba(255,255,255,0.18) !important;
+      border-radius: 12px !important;
+      padding: 12px 14px !important;
+      background: rgba(255,255,255,0.06) !important;
+      box-shadow: none !important;
+
+      text-align: center !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    .kpi-title{
+      font-size: 14px !important;
+      font-weight: 400 !important;
+      color: rgba(255,255,255,0.85) !important;
+      margin-bottom: 6px !important;
+    }
+    .kpi-value{
+      font-size: 22px !important;
+      font-weight: 400 !important;
+      color: #ffffff !important;
+      line-height: 1.2 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # ---------------- Header HTML ----------------
     last_update_str = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%d %b %Y , %H:%M:%S")
 
@@ -74,6 +75,22 @@ def render_home(df: pd.DataFrame):
       padding: 0;
       font-family: 'Prompt', sans-serif;
     }}
+
+    /* ✅ Dino animation */
+    .dino{{
+      font-size: 28px;
+      display: inline-block;
+      transform-origin: 50% 100%;
+      animation: dino-bounce 1.2s ease-in-out infinite;
+      margin-right: 6px;
+    }}
+
+    @keyframes dino-bounce{{
+      0%, 100% {{ transform: translateY(0) rotate(0deg); }}
+      25%      {{ transform: translateY(-2px) rotate(-6deg); }}
+      50%      {{ transform: translateY(0) rotate(0deg); }}
+      75%      {{ transform: translateY(-2px) rotate(6deg); }}
+    }}
   </style>
 </head>
 
@@ -82,20 +99,26 @@ def render_home(df: pd.DataFrame):
 <div style="background-color:#1f1f1f;color:#ffffff;padding:10px 30px;
             display:flex;align-items:center;justify-content:space-between;">
 
+  <!-- ซ้าย -->
   <div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:600;">
-    <span style="font-size:28px;">🦖</span>
+    <span class="dino">🦖</span>
     <span>Dinosaur Fai .com</span>
   </div>
 
-  <div style="text-align:center;flex:1;font-size:16px;">
-    <div style="font-weight:600;">Date</div>
-    <div>
-      <span id="dateLabel"></span>
-      &nbsp;&nbsp;&nbsp;
-      <span id="timeLabel"></span>
+  <!-- กลาง -->
+  <div style="flex:1; display:flex; justify-content:center; gap:40px; font-size:16px;">
+    <div style="text-align:center;">
+      <div style="font-weight:600;">Date</div>
+      <div id="dateLabel"></div>
+    </div>
+
+    <div style="text-align:center;">
+      <div style="font-weight:600;">Time</div>
+      <div id="timeLabel"></div>
     </div>
   </div>
 
+  <!-- ขวา -->
   <div style="text-align:right;font-size:12px;">
     <div style="opacity:0.8;">Last Update</div>
     <div>{last_update_str}</div>
@@ -124,7 +147,7 @@ def render_home(df: pd.DataFrame):
     document.getElementById('dateLabel').textContent =
         day + " " + month + " " + year + " (" + weekday + ")";
     document.getElementById('timeLabel').textContent =
-        "Time " + hours + ":" + minutes + ":" + seconds;
+        hours + ":" + minutes + ":" + seconds;
   }}
 
   updateClock();
@@ -138,19 +161,15 @@ def render_home(df: pd.DataFrame):
 
     # ---------------- เตรียมข้อมูล Date ----------------
     df_display = df.copy()
-
-    df_display["date_dt"] = pd.to_datetime(
-        df_display["Date"],
-        dayfirst=True,
-        errors="coerce"
-    )
+    df_display["date_dt"] = pd.to_datetime(df_display["Date"], dayfirst=True, errors="coerce")
     df_display = df_display.dropna(subset=["date_dt"])
 
-    if not df_display.empty:
-        min_date = df_display["date_dt"].min().date()
-        max_date = df_display["date_dt"].max().date()
-    else:
-        min_date = max_date = datetime.now(ZoneInfo("Asia/Bangkok")).date()
+    if df_display.empty:
+        st.warning("ไม่พบข้อมูลวันที่ที่ใช้งานได้")
+        return
+
+    min_date = df_display["date_dt"].min().date()
+    max_date = df_display["date_dt"].max().date()
 
     # ---------------- UI Filter ----------------
     col_from, col_to, col_type, col_list, col_channel = st.columns([2, 2, 1.5, 1.5, 1.5])
@@ -214,7 +233,8 @@ def render_home(df: pd.DataFrame):
     if "Channel" in df_filtered.columns and selected_channel != "All":
         df_filtered = df_filtered[df_filtered["Channel"].astype(str) == selected_channel]
 
-    df_filtered = df_filtered.drop(columns=["date_dt"], errors="ignore")
+    # เก็บ date_dt ไว้ใช้เลือกแถวล่าสุด แล้วค่อย drop ก่อนโชว์ตาราง
+    df_filtered_sorted = df_filtered.sort_values("date_dt").copy()
 
     st.write("")
 
@@ -239,24 +259,24 @@ def render_home(df: pd.DataFrame):
     # ---------------- KPI 6 ใบ (คำนวณจาก M:Q) ----------------
     mq = ["M", "N", "O", "P", "Q"]
 
-    if all(c in df_filtered.columns for c in mq):
-        tmp = df_filtered[mq].replace("", pd.NA).dropna(how="all")
+    if all(c in df_filtered_sorted.columns for c in mq):
+        tmp = df_filtered_sorted[mq].replace("", pd.NA).dropna(how="all")
         if not tmp.empty:
-            r = tmp.iloc[0]
+            r = tmp.iloc[-1]  # ✅ แถวล่าสุดของช่วง filter
 
-            income = parse_bath(r["M"])
             usable_income = parse_bath(r["O"])
             expenses = parse_bath(r["P"])
             balance = parse_bath(r["Q"])
 
-            # จำนวนวันในช่วงที่เลือก (inclusive) สำหรับค่าเฉลี่ยต่อวัน
-            days_in_range = max((date_to - date_from).days + 1, 1)
+            # ✅ Average Pay : Day = Balance / Balance Date
+            avg_pay_day = (balance / day_left) if day_left > 0 else 0.0
 
-            avg_pay_day = income / days_in_range
-            balance_use_pay_day = usable_income / days_in_range
+            # ✅ Balance Use Pay : Day = Average + 172.04
+            balance_use_pay_day = avg_pay_day + 172.04
 
-            # ✅ 1 Day Forecast = คงเหลือต่อวัน (เงินคงเหลือ / วันเหลือ)
-            one_day_forecast = (balance / day_left) if day_left > 0 else 0.0
+            # ✅ 1 Day Forecast = Balance / (วันคงเหลือของพรุ่งนี้)
+            tomorrow_left = day_left - 1
+            one_day_forecast = (balance / tomorrow_left) if tomorrow_left > 0 else 0.0
 
             a1, a2, a3, a4, a5, a6 = st.columns(6, gap="large")
             with a1:
@@ -271,13 +291,14 @@ def render_home(df: pd.DataFrame):
                 st.markdown(kpi_card("Expenses", fmt_bath(expenses)), unsafe_allow_html=True)
             with a6:
                 st.markdown(kpi_card("Balance", fmt_bath(balance)), unsafe_allow_html=True)
-
-            st.write("")
         else:
             st.info("ไม่พบข้อมูลในคอลัมน์ M-Q สำหรับคำนวณ KPI")
     else:
         st.info("ยังไม่พบคอลัมน์ M-Q ในข้อมูล (ตรวจ data_loader ว่าดึงมาแล้ว)")
 
+    st.write("")
+
     # ---------------- ตาราง ----------------
-    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_filtered)} แถว)")
-    st.dataframe(df_filtered, use_container_width=True)
+    df_table = df_filtered.drop(columns=["date_dt"], errors="ignore")
+    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_table)} แถว)")
+    st.dataframe(df_table, use_container_width=True)
