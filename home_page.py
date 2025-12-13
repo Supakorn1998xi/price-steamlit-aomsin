@@ -2,13 +2,13 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import pandas as pd
 
 
 def render_home(df):
     # ---------------- Header HTML (ฟอนต์ Prompt + เวลา realtime) ----------------
-    last_update_str = datetime.now().strftime("%d %b %Y , %H:%M:%S")
-
+    last_update_str = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%d %b %Y , %H:%M:%S")
     header_html = f"""
 <html>
 <head>
@@ -83,7 +83,7 @@ def render_home(df):
 </html>
 """
 
-    components.html(header_html, height=95)
+    components.html(header_html, height=78)
 
     #st.write("")  # เว้นระยะจากหัว
 
