@@ -206,7 +206,26 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-*.json
+# =========================
+# Streamlit
+# =========================
+.streamlit/secrets.toml
+
+# =========================
+# Credentials / Secrets
+# =========================
+*_service_account.json
+*service-account*.json
+credentials.json
 *.key
 *.secret
+
+# =========================
+# OS / Misc
+# =========================
+.DS_Store
+Thumbs.db
+
+*_service_account.json
+supakorn-datawarehouse-199xi-1c7ba182671e.json
 
