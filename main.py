@@ -12,12 +12,17 @@ def main():
     )
 
     try:
+        # 🔄 Spinner ตอนโหลดข้อมูลจริง (เห็นแน่นอน)
         with st.spinner("⏳ Loading data from Google Sheet..."):
-         df = load_data()
+            df = load_data()
 
-        render_home(df)
+        # 🔄 Spinner ตอนเตรียม Dashboard
+        with st.spinner("⚙️ Preparing dashboard..."):
+            render_home(df)
+
     except Exception as e:
-        st.error(f"มีปัญหาในการดึงข้อมูล: {e}")
+        st.error("❌ มีปัญหาในการโหลดข้อมูล")
+        st.exception(e)
 
 
 if __name__ == "__main__":
