@@ -23,7 +23,7 @@ def load_data():
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
 
-    values = sheet.get("A:F")
+    values = sheet.get("A1:F50")
 
     if not values:
         st.error("ไม่พบข้อมูลใน Google Sheet")

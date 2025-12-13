@@ -12,7 +12,9 @@ def main():
     )
 
     try:
-        df = load_data()
+        with st.spinner("⏳ Loading data from Google Sheet..."):
+         df = load_data()
+
         render_home(df)
     except Exception as e:
         st.error(f"มีปัญหาในการดึงข้อมูล: {e}")

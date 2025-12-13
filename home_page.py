@@ -134,7 +134,7 @@ def render_home(df: pd.DataFrame):
 </body>
 </html>
 """
-    components.html(header_html, height=78)
+    #components.html(header_html, height=78)
 
     # ---------------- เตรียมข้อมูล Date ----------------
     df_display = df.copy()
