@@ -4,12 +4,61 @@ import streamlit.components.v1 as components
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
+import calendar
+
+
+def parse_bath(x):
+    if x is None or pd.isna(x):
+        return 0.0
+    s = str(x).strip()
+    s = s.replace("฿", "").replace(",","")
+    try:
+        return float(s)
+    except:
+        return 0.0
+    
+def fmt_bath(v: float):
+    return f"{v:,.2f} Bath"
+
+def kpi_card(title: str, value: str):
+    return f"""
+<div class="kpi-card">
+    <div class="kpi-title">{title}</div>
+    <div class="kpi-value">{value}</div>
+</div>
+"""
+
+
+st.markdown("""
+<style>
+.kpi-card{
+  border: 1px solid rgba(0,0,0,0.18);
+  border-radius: 999px;
+  padding: 16px 18px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  text-align: center;
+}
+.kpi-title{
+  font-size: 14px;
+  color: rgba(0,0,0,0.55);
+  margin-bottom: 4px;
+}
+.kpi-value{
+  font-size: 26px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.90);
+  line-height: 1.1;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 def render_home(df):
     # ---------------- Header HTML (ฟอนต์ Prompt + เวลา realtime) ----------------
     last_update_str = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%d %b %Y , %H:%M:%S")
     header_html = f"""
+
 <html>
 <head>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -208,10 +257,85 @@ def render_home(df):
     if "Channel" in df_filtered.columns and selected_channel != "All":
         df_filtered = df_filtered[df_filtered["Channel"].astype(str) == selected_channel]
 
-    # ลบคอลัมน์ช่วย
-    df_filtered = df_filtered.drop(columns=["date_dt"])
+    #ลบคอลัมน์ช่วย
+    df_filtered = df_filtered.drop(columns=["date_dt"], errors="ignore")
 
-    # ---------------- แสดงผล ----------------
-    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_filtered)} แถว)")
+    st.write("")
+
+    #kpi card ก่อนตาราง
+
+    today_bkk = datetime.now(ZoneInfo("Asia/Bangkok")).date()
+
+    day_in_month = calendar.monthrange(today_bkk.year,today_bkk.month)[1]
+    day_passed = today_bkk.day
+    day_left = day_in_month - day_passed
+    pct_passed = (day_passed/day_in_month)*100
+
+    c1, c2 , c3 , c4 = st.columns(4, gap="large")
+
+
+    with c1:
+        st.markdown(kpi_card("Date of the month",f"{day_in_month} Day"), unsafe_allow_html=True)
+    with c2:
+        st.markdown(kpi_card("Date Pass",f"{day_passed} Days"),unsafe_allow_html=True)
+    with c3:
+        st.markdown(kpi_card("Balance Date",f"{day_left} Days"),unsafe_allow_html=True)
+    with c4:
+        st.markdown(kpi_card("Date Time Passed",f"{pct_passed:.2f}%"),unsafe_allow_html=True)
+
+    st.write("")
+
+        # ---------------- KPI 6 ใบ (คำนวณจาก M:Q) ----------------
+    mq = ["M", "N", "O", "P", "Q"]
+
+    if all(c in df_filtered.columns for c in mq):
+        tmp = df_filtered[mq].replace("", pd.NA).dropna(how="all")
+        if not tmp.empty:
+            r = tmp.iloc[0]
+
+            income = parse_bath(r["M"])         # รายได้ (฿27,724.00)
+            usable_income = parse_bath(r["O"])  # รายได้ที่ใช้ได้ (฿22,179.20)
+            expenses = parse_bath(r["P"])       # รายจ่าย (฿12,469.90)
+            balance = parse_bath(r["Q"])        # รวมเหลือ (฿9,709.30)
+
+            # ---- จำนวนวันในช่วงที่เลือก (from-to) แบบ inclusive ----
+            days_in_range = (date_to - date_from).days + 1
+            days_in_range = max(days_in_range, 1)
+
+            # ---- วันเหลือของเดือน อิงตาม date_to ----
+            dim = calendar.monthrange(date_to.year, date_to.month)[1]
+            days_left = max(dim - date_to.day, 0)
+
+            avg_pay_day = income / days_in_range
+            balance_use_pay_day = usable_income / days_in_range
+
+            # ✅ คาดการณ์ต่อวันจากเงินคงเหลือ
+            one_day_forecast = (balance / days_left) if days_left > 0 else 0.0
+
+            a1, a2, a3, a4, a5, a6 = st.columns(6, gap="large")
+            with a1:
+                st.markdown(kpi_card("Average Pay : Day", fmt_bath(avg_pay_day)), unsafe_allow_html=True)
+            with a2:
+                st.markdown(kpi_card("Balance Use Pay : Day", fmt_bath(balance_use_pay_day)), unsafe_allow_html=True)
+            with a3:
+                st.markdown(kpi_card("1 Day Forecast", fmt_bath(one_day_forecast)), unsafe_allow_html=True)
+            with a4:
+                st.markdown(kpi_card("Usable Income", fmt_bath(usable_income)), unsafe_allow_html=True)
+            with a5:
+                st.markdown(kpi_card("Expenses", fmt_bath(expenses)), unsafe_allow_html=True)
+            with a6:
+                st.markdown(kpi_card("Balance", fmt_bath(balance)), unsafe_allow_html=True)
+
+            st.write("")
+        else:
+            st.info("ไม่พบข้อมูลในคอลัมน์ M-Q สำหรับคำนวณ KPI")
+    else:
+        st.info("ยังไม่พบคอลัมน์ M-Q ในข้อมูล (ตรวจ data_loader ว่าดึงมาแล้ว)")
+
+
+    #แสดงตาราง
+
+    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_filtered)} แถส)")
     st.dataframe(df_filtered, use_container_width=True)
+
 
