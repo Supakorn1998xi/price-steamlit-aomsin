@@ -5,7 +5,125 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
 import calendar
+import plotly.graph_objects as go
+import numpy as np
 
+def render_price_trend_chart(df: pd.DataFrame, date_col="Date", price_col="Price"):
+    if df is None or df.empty:
+        st.info("ยังไม่มีข้อมูลสำหรับกราฟ")
+        return
+
+    if date_col not in df.columns or price_col not in df.columns:
+        st.info(f"ยังไม่มีข้อมูลสำหรับกราฟ (ตรวจชื่อคอลัมน์ {date_col}/{price_col})")
+        st.write("COLUMNS:", df.columns.tolist())
+        return
+
+    d = df.copy()
+
+    # ----- date -----
+    d["__date"] = pd.to_datetime(d[date_col], dayfirst=True, errors="coerce").dt.date
+    d = d.dropna(subset=["__date"])
+
+    # ----- price -----
+    # รองรับค่าแบบ: 12,345 | ฿12,345.00 | " 123 " | ฯลฯ
+    d["__price"] = (
+        d[price_col]
+        .astype(str)
+        .str.replace("฿", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.strip()
+    )
+    d["__price"] = pd.to_numeric(d["__price"], errors="coerce")
+    d = d.dropna(subset=["__price"])
+
+    if d.empty:
+        st.info("ไม่มีข้อมูลราคา (Price) ที่แปลงเป็นตัวเลขได้ในช่วงที่เลือก")
+        return
+
+    # ----- aggregate รายวัน -----
+    daily = (
+        d.groupby("__date", as_index=False)["__price"]
+        .sum()
+        .sort_values("__date")
+    )
+
+    if daily.empty:
+        st.info("ไม่มีข้อมูลกราฟรายวัน")
+        return
+
+    x = pd.to_datetime(daily["__date"])
+    y = daily["__price"].astype(float).to_numpy()
+
+    avg = float(np.mean(y))
+    mx = float(np.max(y))
+    mn = float(np.min(y))
+
+    # trend line
+    xi = np.arange(len(y))
+    if len(y) >= 2:
+        m, b = np.polyfit(xi, y, 1)
+        trend = m * xi + b
+    else:
+        trend = y
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+    x=x, y=y,
+    mode="lines+markers",
+    text=[f"{v:,.0f}" for v in y],
+    textposition="top center",
+    name="Price",
+    line=dict(shape="spline", smoothing=1.2)  # ✅ โค้งมนนุ่ม ๆ
+))
+
+
+    fig.add_trace(go.Scatter(
+    x=x, y=trend,
+    mode="lines",
+    name="Trend",
+    line=dict(dash="dash", shape="spline", smoothing=1.2)
+))
+
+
+    # avg / max / min lines (กำหนดสี)
+    fig.add_hline(
+        y=mx,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Max: {mx:,.2f}",
+        annotation_position="top left"
+    )
+
+    fig.add_hline(
+        y=avg,
+        line_dash="dash",
+        line_color="yellow",
+        annotation_text=f"Average: {avg:,.2f}",
+        annotation_position="bottom left"
+    )
+
+    fig.add_hline(
+        y=mn,
+        line_dash="dash",
+        line_color="green",
+        annotation_text=f"Min: {mn:,.2f}",
+        annotation_position="bottom left"
+    )
+
+
+    fig.update_layout(
+    height=420,
+    margin=dict(l=10, r=10, t=10, b=10),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    showlegend=False
+)
+    fig.update_xaxes(tickformat="%d %b %Y")  # 02 Dec 2025
+
+    
+
+    st.plotly_chart(fig, use_container_width=True)
 
 def parse_bath(x):
     if x is None or (isinstance(x, float) and pd.isna(x)) or (isinstance(x, str) and x.strip() == ""):
@@ -32,6 +150,43 @@ def kpi_card(title: str, value: str):
 
 def render_home(df: pd.DataFrame):
     # ---------------- KPI CSS (ให้เสถียรทุกครั้งที่ rerun) ----------------
+
+    st.markdown("""
+    <style>
+    div[data-testid="stPlotlyChart"] {
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+}
+    .chart-card [data-testid="stPlotlyChart"]{
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    }
+       
+
+    .chart-card{
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;  /* ✅ กันมุมกราฟโผล่ */
+    }
+
+    /* ✅ ตัด padding/กรอบภายในของ Streamlit/Plotly */
+    .chart-card .stPlotlyChart, 
+    .chart-card iframe {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+
     st.markdown("""
     <style>
     .kpi-card{
@@ -300,5 +455,10 @@ def render_home(df: pd.DataFrame):
 
     # ---------------- ตาราง ----------------
     df_table = df_filtered.drop(columns=["date_dt"], errors="ignore")
+    st.subheader("Daily Price Trend")
+    chart_box = st.container()
+    with chart_box:
+        render_price_trend_chart(df_filtered_sorted, date_col="Date", price_col="Price")
+
     st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_table)} แถว)")
     st.dataframe(df_table, use_container_width=True)
