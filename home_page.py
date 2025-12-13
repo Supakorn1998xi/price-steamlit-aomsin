@@ -8,57 +8,63 @@ import calendar
 
 
 def parse_bath(x):
-    if x is None or pd.isna(x):
+    if x is None or (isinstance(x, float) and pd.isna(x)) or (isinstance(x, str) and x.strip() == ""):
         return 0.0
     s = str(x).strip()
-    s = s.replace("฿", "").replace(",","")
+    s = s.replace("฿", "").replace(",", "")
     try:
         return float(s)
     except:
         return 0.0
-    
+
+
 def fmt_bath(v: float):
     return f"{v:,.2f} Bath"
+
 
 def kpi_card(title: str, value: str):
     return f"""
 <div class="kpi-card">
-    <div class="kpi-title">{title}</div>
-    <div class="kpi-value">{value}</div>
+  <div class="kpi-title">{title}</div>
+  <div class="kpi-value">{value}</div>
 </div>
 """
 
 
-st.markdown("""
+# CSS (บังคับให้การ์ดชนะ theme)
+st.markdown(
+    """
 <style>
 .kpi-card{
-  border: 1px solid rgba(0,0,0,0.18);
-  border-radius: 999px;
-  padding: 16px 18px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  text-align: center;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  border-radius: 999px !important;
+  padding: 16px 18px !important;
+  background: rgba(255,255,255,0.95) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;
+  text-align: center !important;
 }
 .kpi-title{
-  font-size: 14px;
-  color: rgba(0,0,0,0.55);
-  margin-bottom: 4px;
+  font-size: 14px !important;
+  color: rgba(0,0,0,0.55) !important;
+  margin-bottom: 4px !important;
 }
 .kpi-value{
-  font-size: 26px;
-  font-weight: 600;
-  color: rgba(0,0,0,0.90);
-  line-height: 1.1;
+  font-size: 26px !important;
+  font-weight: 600 !important;
+  color: rgba(0,0,0,0.90) !important;
+  line-height: 1.1 !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
-def render_home(df):
-    # ---------------- Header HTML (ฟอนต์ Prompt + เวลา realtime) ----------------
+def render_home(df: pd.DataFrame):
+    # ---------------- Header HTML ----------------
     last_update_str = datetime.now(ZoneInfo("Asia/Bangkok")).strftime("%d %b %Y , %H:%M:%S")
-    header_html = f"""
 
+    header_html = f"""
 <html>
 <head>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -76,13 +82,11 @@ def render_home(df):
 <div style="background-color:#1f1f1f;color:#ffffff;padding:10px 30px;
             display:flex;align-items:center;justify-content:space-between;">
 
-  <!-- ซ้าย -->
   <div style="display:flex;align-items:center;gap:8px;font-size:20px;font-weight:600;">
     <span style="font-size:28px;">🦖</span>
     <span>Dinosaur Fai .com</span>
   </div>
 
-  <!-- กลาง -->
   <div style="text-align:center;flex:1;font-size:16px;">
     <div style="font-weight:600;">Date</div>
     <div>
@@ -92,7 +96,6 @@ def render_home(df):
     </div>
   </div>
 
-  <!-- ขวา -->
   <div style="text-align:right;font-size:12px;">
     <div style="opacity:0.8;">Last Update</div>
     <div>{last_update_str}</div>
@@ -131,15 +134,11 @@ def render_home(df):
 </body>
 </html>
 """
-
     components.html(header_html, height=78)
 
-    #st.write("")  # เว้นระยะจากหัว
-
-        # ---------------- เตรียมข้อมูล Date (คอลัมชื่อ Date, รูปแบบวัน/เดือน/ปี) ----------------
+    # ---------------- เตรียมข้อมูล Date ----------------
     df_display = df.copy()
 
-    # แปลงคอลัม Date -> datetime (ข้อมูล dd/MM/yyyy)
     df_display["date_dt"] = pd.to_datetime(
         df_display["Date"],
         dayfirst=True,
@@ -151,14 +150,11 @@ def render_home(df):
         min_date = df_display["date_dt"].min().date()
         max_date = df_display["date_dt"].max().date()
     else:
-        min_date = max_date = datetime.now().date()
+        min_date = max_date = datetime.now(ZoneInfo("Asia/Bangkok")).date()
 
-    # ---------------- UI Filter: Date From / To + Type + List + Channel ----------------
-    #st.caption("Date (DD/MM/YYYY)")
-
+    # ---------------- UI Filter ----------------
     col_from, col_to, col_type, col_list, col_channel = st.columns([2, 2, 1.5, 1.5, 1.5])
 
-    # From
     with col_from:
         st.text("From")
         date_from = st.date_input(
@@ -170,7 +166,6 @@ def render_home(df):
             label_visibility="collapsed",
         )
 
-    # To
     with col_to:
         st.text("To")
         date_to = st.date_input(
@@ -182,110 +177,66 @@ def render_home(df):
             label_visibility="collapsed",
         )
 
-    # Type dropdown
     with col_type:
         st.text("Type")
+        type_options = ["All"]
         if "Type" in df_display.columns:
-            type_options = ["All"] + sorted(
-                df_display["Type"].dropna().astype(str).unique().tolist()
-            )
-        else:
-            type_options = ["All"]
+            type_options += sorted(df_display["Type"].dropna().astype(str).unique().tolist())
+        selected_type = st.selectbox("type_select", type_options, index=0, label_visibility="collapsed")
 
-        selected_type = st.selectbox(
-            "type_select",
-            type_options,
-            index=0,
-            label_visibility="collapsed",
-        )
-
-    # List dropdown
     with col_list:
         st.text("List")
+        list_options = ["All"]
         if "List" in df_display.columns:
-            list_options = ["All"] + sorted(
-                df_display["List"].dropna().astype(str).unique().tolist()
-            )
-        else:
-            list_options = ["All"]
+            list_options += sorted(df_display["List"].dropna().astype(str).unique().tolist())
+        selected_list = st.selectbox("list_select", list_options, index=0, label_visibility="collapsed")
 
-        selected_list = st.selectbox(
-            "list_select",
-            list_options,
-            index=0,
-            label_visibility="collapsed",
-        )
-
-    # Channel dropdown
     with col_channel:
         st.text("Channel")
+        channel_options = ["All"]
         if "Channel" in df_display.columns:
-            channel_options = ["All"] + sorted(
-                df_display["Channel"].dropna().astype(str).unique().tolist()
-            )
-        else:
-            channel_options = ["All"]
+            channel_options += sorted(df_display["Channel"].dropna().astype(str).unique().tolist())
+        selected_channel = st.selectbox("channel_select", channel_options, index=0, label_visibility="collapsed")
 
-        selected_channel = st.selectbox(
-            "channel_select",
-            channel_options,
-            index=0,
-            label_visibility="collapsed",
-        )
-
-    # ถ้า user เลือกสลับ from/to ก็สลับกลับให้
     if date_from > date_to:
         date_from, date_to = date_to, date_from
 
     # ---------------- Apply Filter ----------------
-    # filter ตามวันที่ก่อน
-    mask = (
-        (df_display["date_dt"].dt.date >= date_from) &
-        (df_display["date_dt"].dt.date <= date_to)
-    )
-    df_filtered = df_display[mask].copy()
+    mask = (df_display["date_dt"].dt.date >= date_from) & (df_display["date_dt"].dt.date <= date_to)
+    df_filtered = df_display.loc[mask].copy()
 
-    # filter ตาม Type
     if "Type" in df_filtered.columns and selected_type != "All":
         df_filtered = df_filtered[df_filtered["Type"].astype(str) == selected_type]
 
-    # filter ตาม List
     if "List" in df_filtered.columns and selected_list != "All":
         df_filtered = df_filtered[df_filtered["List"].astype(str) == selected_list]
 
-    # filter ตาม Channel
     if "Channel" in df_filtered.columns and selected_channel != "All":
         df_filtered = df_filtered[df_filtered["Channel"].astype(str) == selected_channel]
 
-    #ลบคอลัมน์ช่วย
     df_filtered = df_filtered.drop(columns=["date_dt"], errors="ignore")
 
     st.write("")
 
-    #kpi card ก่อนตาราง
+    # ---------------- KPI 4 ใบ (อิงเดือนตาม date_to) ----------------
+    day_in_month = calendar.monthrange(date_to.year, date_to.month)[1]
+    day_passed = date_to.day
+    day_left = max(day_in_month - day_passed, 0)
+    pct_passed = (day_passed / day_in_month) * 100 if day_in_month else 0.0
 
-    today_bkk = datetime.now(ZoneInfo("Asia/Bangkok")).date()
-
-    day_in_month = calendar.monthrange(today_bkk.year,today_bkk.month)[1]
-    day_passed = today_bkk.day
-    day_left = day_in_month - day_passed
-    pct_passed = (day_passed/day_in_month)*100
-
-    c1, c2 , c3 , c4 = st.columns(4, gap="large")
-
-
+    c1, c2, c3, c4 = st.columns(4, gap="large")
     with c1:
-        st.markdown(kpi_card("Date of the month",f"{day_in_month} Day"), unsafe_allow_html=True)
+        st.markdown(kpi_card("Date of the month", f"{day_in_month} Days"), unsafe_allow_html=True)
     with c2:
-        st.markdown(kpi_card("Date Pass",f"{day_passed} Days"),unsafe_allow_html=True)
+        st.markdown(kpi_card("Date Pass", f"{day_passed} Days"), unsafe_allow_html=True)
     with c3:
-        st.markdown(kpi_card("Balance Date",f"{day_left} Days"),unsafe_allow_html=True)
+        st.markdown(kpi_card("Balance Date", f"{day_left} Days"), unsafe_allow_html=True)
     with c4:
-        st.markdown(kpi_card("Date Time Passed",f"{pct_passed:.2f}%"),unsafe_allow_html=True)
+        st.markdown(kpi_card("Date Time Passed", f"{pct_passed:.2f}%"), unsafe_allow_html=True)
 
     st.write("")
 
-        # ---------------- KPI 6 ใบ (คำนวณจาก M:Q) ----------------
+    # ---------------- KPI 6 ใบ (คำนวณจาก M:Q) ----------------
     mq = ["M", "N", "O", "P", "Q"]
 
     if all(c in df_filtered.columns for c in mq):
@@ -293,24 +244,19 @@ def render_home(df):
         if not tmp.empty:
             r = tmp.iloc[0]
 
-            income = parse_bath(r["M"])         # รายได้ (฿27,724.00)
-            usable_income = parse_bath(r["O"])  # รายได้ที่ใช้ได้ (฿22,179.20)
-            expenses = parse_bath(r["P"])       # รายจ่าย (฿12,469.90)
-            balance = parse_bath(r["Q"])        # รวมเหลือ (฿9,709.30)
+            income = parse_bath(r["M"])
+            usable_income = parse_bath(r["O"])
+            expenses = parse_bath(r["P"])
+            balance = parse_bath(r["Q"])
 
-            # ---- จำนวนวันในช่วงที่เลือก (from-to) แบบ inclusive ----
-            days_in_range = (date_to - date_from).days + 1
-            days_in_range = max(days_in_range, 1)
-
-            # ---- วันเหลือของเดือน อิงตาม date_to ----
-            dim = calendar.monthrange(date_to.year, date_to.month)[1]
-            days_left = max(dim - date_to.day, 0)
+            # จำนวนวันในช่วงที่เลือก (inclusive) สำหรับค่าเฉลี่ยต่อวัน
+            days_in_range = max((date_to - date_from).days + 1, 1)
 
             avg_pay_day = income / days_in_range
             balance_use_pay_day = usable_income / days_in_range
 
-            # ✅ คาดการณ์ต่อวันจากเงินคงเหลือ
-            one_day_forecast = (balance / days_left) if days_left > 0 else 0.0
+            # ✅ 1 Day Forecast = คงเหลือต่อวัน (เงินคงเหลือ / วันเหลือ)
+            one_day_forecast = (balance / day_left) if day_left > 0 else 0.0
 
             a1, a2, a3, a4, a5, a6 = st.columns(6, gap="large")
             with a1:
@@ -332,10 +278,6 @@ def render_home(df):
     else:
         st.info("ยังไม่พบคอลัมน์ M-Q ในข้อมูล (ตรวจ data_loader ว่าดึงมาแล้ว)")
 
-
-    #แสดงตาราง
-
-    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_filtered)} แถส)")
+    # ---------------- ตาราง ----------------
+    st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_filtered)} แถว)")
     st.dataframe(df_filtered, use_container_width=True)
-
-
