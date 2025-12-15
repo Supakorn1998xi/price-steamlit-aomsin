@@ -8,6 +8,165 @@ import calendar
 import plotly.graph_objects as go
 import numpy as np
 
+def build_list_summary_table(df: pd.DataFrame):
+    if df.empty or "List" not in df.columns or "Price" not in df.columns:
+        return None
+
+    d = df.copy()
+
+    # แปลง Price เป็นตัวเลข
+    d["Price_num"] = (
+        d["Price"]
+        .astype(str)
+        .str.replace("฿", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.strip()
+    )
+    d["Price_num"] = pd.to_numeric(d["Price_num"], errors="coerce")
+    d = d.dropna(subset=["Price_num"])
+
+    if d.empty:
+        return None
+
+    # group by List
+    summary = (
+        d.groupby("List", as_index=False)
+        .agg(
+            Record_Count=("Price_num", "count"),
+            Total=("Price_num", "sum"),
+        )
+    )
+
+    summary["Average_Pay"] = summary["Total"] / summary["Record_Count"]
+
+    grand_total = summary["Total"].sum()
+    summary["Percent"] = summary["Total"] / grand_total * 100
+
+    summary = summary.sort_values("Total", ascending=False)
+
+    # ===== footer =====
+    total_count = summary["Record_Count"].sum()
+    total_sum = summary["Total"].sum()
+    total_avg = total_sum / total_count if total_count > 0 else 0
+
+    footer = pd.DataFrame([{
+        "List": "Total",
+        "Record_Count": total_count,
+        "Total": total_sum,
+        "Average_Pay": total_avg,
+        "Percent": 100.0
+    }])
+
+    summary = pd.concat([summary, footer], ignore_index=True)
+
+    # เพิ่ม Index
+    summary.insert(0, "Index", range(1, len(summary) + 1))
+
+    return summary
+
+def render_summary_table_with_sticky_footer(summary_df: pd.DataFrame):
+    if summary_df is None or summary_df.empty:
+        st.info("ไม่มีข้อมูลสำหรับแสดงตาราง")
+        return
+
+    body = summary_df.iloc[:-1].copy()
+    footer = summary_df.iloc[-1:].copy()
+
+    html = """
+    <style>
+    .table-wrap{
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      overflow: hidden;
+    }
+    .table-scroll{
+      max-height: 420px;
+      overflow-y: auto;
+    }
+    table{
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'Prompt', sans-serif;
+    }
+    thead th{
+      position: sticky;
+      top: 0;
+      background: rgba(20,20,20,0.95);
+      color: #fff;
+      padding: 10px;
+      text-align: left;
+    }
+    tbody td{
+      padding: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.9);
+    }
+    tfoot td{
+      position: sticky;
+      bottom: 0;
+      background: rgba(20,20,20,0.95);
+      color: #fff;
+      padding: 10px;
+      font-weight: 600;
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    .right{ text-align: right; }
+    </style>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+    """
+
+    # ---------- header ----------
+    for c in summary_df.columns:
+        html += f"<th>{c}</th>"
+    html += "</tr></thead><tbody>"
+
+    # ---------- body ----------
+    for _, row in body.iterrows():
+        html += "<tr>"
+        for c in summary_df.columns:
+            val = row[c]
+
+            if c == "Average_Pay":
+                val = f"{float(val):,.2f}"
+            elif c == "Percent":
+                val = f"{float(val):.2f}%"
+
+            cls = "right" if c != "List" else ""
+            html += f'<td class="{cls}">{val}</td>'
+        html += "</tr>"
+
+    html += "</tbody><tfoot><tr>"
+
+    # ---------- footer ----------
+    footer_row = footer.iloc[0]
+    for c in summary_df.columns:
+        val = footer_row[c]
+
+        if c == "Average_Pay":
+            val = f"{float(val):,.2f}"
+        elif c == "Percent":
+            val = f"{float(val):.2f}%"
+
+        cls = "right" if c != "List" else ""
+        html += f'<td class="{cls}">{val}</td>'
+
+    html += """
+        </tr></tfoot>
+        </table>
+      </div>
+    </div>
+    """
+
+    st.markdown(html, unsafe_allow_html=True)
+
+
+
+
 def render_price_trend_chart(df: pd.DataFrame, date_col="Date", price_col="Price"):
     if df is None or df.empty:
         st.info("ยังไม่มีข้อมูลสำหรับกราฟ")
@@ -111,17 +270,27 @@ def render_price_trend_chart(df: pd.DataFrame, date_col="Date", price_col="Price
         annotation_position="bottom left"
     )
 
-
     fig.update_layout(
-    height=420,
-    margin=dict(l=10, r=10, t=10, b=10),
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    showlegend=False
-)
-    fig.update_xaxes(tickformat="%d %b %Y")  # 02 Dec 2025
+        height=420,
+        margin=dict(l=10, r=10, t=10, b=25),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        yaxis=dict(domain=[0.12, 1.0])
+    )
 
-    
+    y_padding = (mx - mn) * 0.05
+    fig.update_yaxes(range=[mn - y_padding, mx + y_padding])
+
+    fig.update_xaxes(
+        type="date",
+        tickformat="%d %b %Y",
+        ticklabelstandoff=8,
+        ticks="outside",
+        ticklabelposition="outside"
+    )
+
+
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -459,6 +628,16 @@ def render_home(df: pd.DataFrame):
     chart_box = st.container()
     with chart_box:
         render_price_trend_chart(df_filtered_sorted, date_col="Date", price_col="Price")
+
+    st.subheader("Summary by List")
+
+    summary_df = build_list_summary_table(df_filtered)
+
+    if summary_df is not None:
+        render_summary_table_with_sticky_footer(summary_df)
+    else:
+        st.info("ไม่มีข้อมูลสำหรับสรุป")
+
 
     st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_table)} แถว)")
     st.dataframe(df_table, use_container_width=True)

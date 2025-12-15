@@ -4,7 +4,6 @@ from data_loader import load_data
 from home_page import render_home
 import plotly.graph_objects as go
 
-
 def main():
     st.set_page_config(
         page_title="Price Dashboard",
