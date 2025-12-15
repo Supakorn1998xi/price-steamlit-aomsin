@@ -8,6 +8,211 @@ import calendar
 import plotly.graph_objects as go
 import numpy as np
 
+import pandas as pd
+import streamlit as st
+import plotly.graph_objects as go
+import plotly.io as pio
+import streamlit.components.v1 as components
+
+
+def build_type_end_summary(df: pd.DataFrame, type_col="Type_End", price_col="Price"):
+    """
+    สรุป Total + Percent ตาม type_col และมี footer Total แถวสุดท้าย
+    """
+    if df is None or df.empty or type_col not in df.columns or price_col not in df.columns:
+        return None
+
+    d = df.copy()
+
+    # parse price -> numeric
+    d["__price"] = (
+        d[price_col].astype(str)
+        .str.replace("฿", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.strip()
+    )
+    d["__price"] = pd.to_numeric(d["__price"], errors="coerce")
+
+    # ✅ dropna ต้องเป็น list
+    d = d.dropna(subset=["__price", type_col])
+
+    if d.empty:
+        return None
+
+    s = (
+        d.groupby(type_col, as_index=False)
+        .agg(Total=("__price", "sum"))
+        .sort_values("Total", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    grand = float(s["Total"].sum()) if len(s) else 0.0
+    s["Percent"] = (s["Total"] / grand * 100.0) if grand > 0 else 0.0
+
+    # footer
+    footer = pd.DataFrame([{
+        type_col: "Total",
+        "Total": grand,
+        "Percent": 100.0 if grand > 0 else 0.0
+    }])
+
+    return pd.concat([s, footer], ignore_index=True)
+
+
+def render_type_end_box(summary_df: pd.DataFrame, title="%Share By Type End", type_col="Type_End"):
+    """
+    แสดง donut + legend อยู่ใน box เดียว (ไม่ใช้ st.columns เพื่อกัน layout แตก)
+    """
+    if summary_df is None or summary_df.empty:
+        st.info("ไม่มีข้อมูล Type สำหรับสรุป")
+        return
+
+    if type_col not in summary_df.columns or "Total" not in summary_df.columns or "Percent" not in summary_df.columns:
+        st.info("โครงสร้าง summary_df ไม่ถูกต้อง (ต้องมี Type/Total/Percent)")
+        st.write("COLUMNS:", summary_df.columns.tolist())
+        return
+
+    body = summary_df.iloc[:-1].copy()  # ตัด footer ออกก่อนทำกราฟ
+    if body.empty:
+        st.info("ไม่มีข้อมูลสำหรับกราฟ")
+        return
+
+    # สีคงที่ (ตามลำดับ)
+    colors = ["#8fd0ff", "#2b7cff", "#ffb6c1", "#ff2d2d", "#9b8cff", "#5ee0c2"]
+
+    fig = go.Figure(go.Pie(
+        labels=body[type_col].astype(str),
+        values=body["Total"].astype(float),
+        hole=0.60,
+        domain=dict(x=[0.0, 0.78], y=[0.0, 1.0]),
+        textposition="inside",
+        texttemplate="%{percent:.2%}",
+        insidetextorientation="horizontal",
+        showlegend=False,
+        marker=dict(colors=colors[:len(body)])
+    ))
+
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor="center", font=dict(color="white")),
+        height=320,
+        margin=dict(l=10, r=10, t=45, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
+    )
+
+    fig_html = pio.to_html(
+        fig,
+        full_html=False,
+        include_plotlyjs="cdn",
+        config={"displayModeBar": False, "responsive": True}
+    )
+
+    # legend HTML
+    lg_rows = ""
+    for i, row in body.reset_index(drop=True).iterrows():
+        name = str(row[type_col])
+        pct = float(row["Percent"])
+        col = colors[i % len(colors)]
+        lg_rows += f"""
+          <div class="lg-row">
+            <span class="dot" style="background:{col}"></span>
+            <span class="name">{name}</span>
+            <span class="pct">{pct:.2f}%</span>
+          </div>
+        """
+
+    box_html = f"""
+<div class="box-card">
+  <div class="box-grid">
+    <div class="chart-wrap">{fig_html}</div>
+    <div class="legend-wrap">
+      <div class="type-legend">{lg_rows}</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .box-card {{
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 14px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }}
+
+  .box-grid {{
+    display: grid;
+    grid-template-columns: 72% 28%;
+    gap: 10px;
+    align-items: center;
+  }}
+
+  /* ปรับขนาดให้พอดีกรอบ */
+  .chart-wrap {{
+    width: 100%;
+    height: 320px;
+    overflow: hidden;
+  }}
+  .chart-wrap > div {{
+    width: 100% !important;
+    height: 320px !important;
+  }}
+
+  .legend-wrap {{
+    width: 100%;
+    height: 320px;
+    display: flex;
+    align-items: center;
+    padding-right: 14px;   /* ✅ เพิ่ม */
+    padding-left: 8px;     /* ✅ เพิ่ม (ให้ไม่ชิดกราฟเกิน) */
+    box-sizing: border-box;
+  }}
+
+  .type-legend {{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-left: 10px;    /* ✅ เดิม 6 -> 10 */
+    padding-right: 8px;    /* ✅ เพิ่ม */
+    box-sizing: border-box;
+  }}
+
+  .lg-row {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.92);
+  }}
+
+  .dot {{
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex: 0 0 12px;
+  }}
+
+  .name {{
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }}
+
+  .pct {{
+    opacity: .85;
+    flex: 0 0 auto;
+  }}
+</style>
+"""
+
+    # ✅ กล่องเดียวจบ ไม่ทำให้เกิดแถบ/กรอบลอยๆ
+    components.html(box_html, height=360, scrolling=False)
+
+
 def build_list_summary_table(df: pd.DataFrame):
     if df.empty or "List" not in df.columns or "Price" not in df.columns:
         return None
@@ -521,10 +726,10 @@ def render_home(df: pd.DataFrame):
         )
 
     with col_type:
-        st.text("Type")
+        st.text("Type_End")
         type_options = ["All"]
-        if "Type" in df_display.columns:
-            type_options += sorted(df_display["Type"].dropna().astype(str).unique().tolist())
+        if "Type_End" in df_display.columns:
+            type_options += sorted(df_display["Type_End"].dropna().astype(str).unique().tolist())
         selected_type = st.selectbox("type_select", type_options, index=0, label_visibility="collapsed")
 
     with col_list:
@@ -622,22 +827,29 @@ def render_home(df: pd.DataFrame):
 
     st.write("")
 
-    # ---------------- ตาราง ----------------
     df_table = df_filtered.drop(columns=["date_dt"], errors="ignore")
+
     st.subheader("Daily Price Trend")
-    chart_box = st.container()
-    with chart_box:
-        render_price_trend_chart(df_filtered_sorted, date_col="Date", price_col="Price")
+    render_price_trend_chart(df_filtered_sorted, date_col="Date", price_col="Price")
 
-    st.subheader("Summary by List")
+    st.write("")
 
-    summary_df = build_list_summary_table(df_filtered)
+    left, right = st.columns([1.05, 1.35], gap="large")
 
-    if summary_df is not None:
-        render_summary_table_with_sticky_footer(summary_df)
-    else:
-        st.info("ไม่มีข้อมูลสำหรับสรุป")
+    with left:
+        st.subheader("%Share By Type End")
+        type_sum = build_type_end_summary(df_filtered_sorted, type_col="Type_End", price_col="Price")
+        render_type_end_box(type_sum, title="", type_col="Type_End")   # ✅ ส่ง title="" เพื่อไม่ให้ซ้ำ
 
+    with right:
+        st.subheader("Summary by List")
+        summary_df = build_list_summary_table(df_filtered_sorted)
+        if summary_df is not None:
+            render_summary_table_with_sticky_footer(summary_df)
+        else:
+            st.info("ไม่มีข้อมูลสำหรับสรุป List")
 
+    st.write("")
     st.subheader(f"ข้อมูลหลัง Filter (จำนวน {len(df_table)} แถว)")
     st.dataframe(df_table, use_container_width=True)
+
